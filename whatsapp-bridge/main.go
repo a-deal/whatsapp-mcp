@@ -250,6 +250,29 @@ func sendWhatsAppMessage(client *whatsmeow.Client, recipient string, message str
 		}
 	}
 
+	// For personal chats, resolve phone number JID to LID (Linked Identity).
+	// WhatsApp is migrating to LID-based addressing; messages sent to the
+	// phone JID silently fail for migrated contacts.
+	if recipientJID.Server == types.DefaultUserServer {
+		ctx := context.Background()
+		lid, lidErr := client.Store.LIDs.GetLIDForPN(ctx, recipientJID)
+		if lidErr != nil {
+			fmt.Printf("Warning: LID lookup failed for %s: %v\n", recipientJID, lidErr)
+		} else if !lid.IsEmpty() {
+			fmt.Printf("Resolved %s -> %s (LID)\n", recipientJID, lid)
+			recipientJID = lid
+		} else {
+			// Not cached locally — ask the WhatsApp server
+			info, infoErr := client.GetUserInfo(ctx, []types.JID{recipientJID})
+			if infoErr != nil {
+				fmt.Printf("Warning: server LID lookup failed for %s: %v\n", recipientJID, infoErr)
+			} else if userInfo, ok := info[recipientJID]; ok && !userInfo.LID.IsEmpty() {
+				fmt.Printf("Resolved %s -> %s (LID via server)\n", recipientJID, userInfo.LID)
+				recipientJID = userInfo.LID
+			}
+		}
+	}
+
 	msg := &waProto.Message{}
 
 	// Check if we have media to send

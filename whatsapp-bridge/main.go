@@ -256,13 +256,14 @@ func sendWhatsAppMessage(client *whatsmeow.Client, recipient string, message str
 	if recipientJID.Server == types.DefaultUserServer {
 		ctx := context.Background()
 		lid, lidErr := client.Store.LIDs.GetLIDForPN(ctx, recipientJID)
-		if lidErr != nil {
-			fmt.Printf("Warning: LID lookup failed for %s: %v\n", recipientJID, lidErr)
-		} else if !lid.IsEmpty() {
+		if lidErr == nil && !lid.IsEmpty() {
 			fmt.Printf("Resolved %s -> %s (LID)\n", recipientJID, lid)
 			recipientJID = lid
 		} else {
-			// Not cached locally — ask the WhatsApp server
+			// Cache miss or cache error — ask the WhatsApp server.
+			if lidErr != nil {
+				fmt.Printf("Warning: LID cache lookup failed for %s: %v, falling back to server\n", recipientJID, lidErr)
+			}
 			info, infoErr := client.GetUserInfo(ctx, []types.JID{recipientJID})
 			if infoErr != nil {
 				fmt.Printf("Warning: server LID lookup failed for %s: %v\n", recipientJID, infoErr)
